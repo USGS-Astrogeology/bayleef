@@ -5,10 +5,10 @@ services:
     environment: 
       POSTGRES_PASSWORD: 1234
       POSTGRES_USER: kelvin
-      POSTGRES_DB: landsat8
+      POSTGRES_DB: thermal
     volumes:
-      - "/data/big/repos/dump:/var/run/"
-      - "/data/fast/thermal_alert:/var/lib/postgresql/data"
+      - "/data/dump:/var/run/"
+      - "/data/postgres:/var/lib/postgresql/data"
     ports:
         - "9001:5432"
   admin:

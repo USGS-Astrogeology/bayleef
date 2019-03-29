@@ -1,0 +1,21 @@
+data: "/scratch/krodriguez/bayleef-data/"
+davinci_bin: "/home/krodriguez/Downloads/davinci"
+
+themis:
+  controlled_kernels: "/archive/projects/themis_control/Kernels"
+  map_file: "/home/krodriguez/repos/bayleef/bayleef/examples/isis_files/equirectangular.map"
+  bundle_parameters:
+      radius : yes
+      update : yes
+      errorpropagation : no
+      outlier_rejection : no
+      sigma0 : 1.0e-10
+      maxits : 10
+      camsolve : accelerations
+      twist : yes
+      overexisting : yes
+      spsolve : NONE
+      camera_angles_sigma : .25
+      camera_angular_velocity_sigma : .1
+      camera_angular_acceleration_sigma : .01
+      point_radius_sigma : 50

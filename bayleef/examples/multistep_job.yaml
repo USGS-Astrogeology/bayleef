@@ -1,0 +1,11 @@
+step1:
+      - sleep 5;echo step1-job1
+      - sleep 5;echo step1-job2
+      - sleep 5;echo step1-job3
+step2:
+      - sleep 2;echo step2-job1
+      - sleep 2;echo step2-job2
+      - sleep 2;echo step2-job3
+step3:
+      - echo 1
+      - echo 2

@@ -23,7 +23,7 @@ def test_clear_order():
     pytest.skip()
 
 
-@mock.patch('usgs.api.requests.post', MockPost('dataset-fields.json'))
+@mock.patch('bayleef.api.requests.post', MockPost('dataset-fields.json'))
 def test_dataset_fields():
 
     expected_keys = ["fieldId", "name", "valueList", "fieldLink"]
@@ -36,7 +36,7 @@ def test_dataset_fields():
             assert item.get(key) is not None
 
 
-@mock.patch('usgs.api.requests.post', MockPost('datasets.json'))
+@mock.patch('bayleef.api.requests.post', MockPost('datasets.json'))
 def test_datasets():
 
     expected_keys = [
@@ -54,14 +54,14 @@ def test_datasets():
             assert item.get(key) is not None
 
 
-@mock.patch('usgs.api.requests.post', MockPost('download.json'))
+@mock.patch('bayleef.api.requests.post', MockPost('download.json'))
 def test_download():
     response = api.download("LANDSAT_8_C1", "EE", ["LC80810712017104LGN00"], product='STANDARD')
     assert check_root_keys(response)
     assert len(response['data']) == 1
 
 
-@mock.patch('usgs.api.requests.post', MockPost('download-options.json'))
+@mock.patch('bayleef.api.requests.post', MockPost('download-options.json'))
 def test_download_options():
 
     expected_keys = ["available", "storageLocation", "url", "productName", "filesize", "downloadCode"]
@@ -90,7 +90,7 @@ def test_item_basket():
     pytest.skip()
 
 
-@mock.patch('usgs.api.requests.post', MockPost('metadata.json'))
+@mock.patch('bayleef.api.requests.post', MockPost('metadata.json'))
 def test_metadata():
 
     expected_keys = [
@@ -118,7 +118,7 @@ def test_remove_order_scene():
     pytest.skip()
 
 
-@mock.patch('usgs.api.requests.post', MockPost('search.json'))
+@mock.patch('bayleef.api.requests.post', MockPost('search.json'))
 def test_search():
     expected_keys = ["totalHits", "firstRecord", "nextRecord", "results", "numberReturned", "lastRecord"]
 

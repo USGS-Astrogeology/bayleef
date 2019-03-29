@@ -1,32 +1,44 @@
-import sys
-import os, json
-import click
+import errno
+import json
 import logging
+import os
 import re
-import wget
+import sys
 import tarfile
-import gdal
-
-from threading import Thread
+from datetime import datetime
 from glob import glob
+from shutil import copyfile
+from threading import Thread
+
+import re
+import yaml
+import fnmatch
+import click
 from sqlalchemy import create_engine
 from sqlalchemy.exc import IntegrityError
 
-from plio.io.io_gdal import GeoDataset
+import gdal
+import wget
+# from plio.io.io_gdal import GeoDataset
+from pathlib import Path
 
-from datetime import datetime
-import errno
-from shutil import copyfile
+from .. import api
+from .. import ingest
+from .. import utils
+from .. import sql
+from .. import pysbatch
+from bayleef import config
+from bayleef import config_file
 
-from bayleef import api
-from bayleef.utils import get_path, geolocate, master_isvalid
-from bayleef.sql import func_map
+from collections import OrderedDict
+from sys import stdin
+from os import isatty
+import subprocess
 
-
-LOG_FORMAT = '%(asctime)-15s ->> %(message)s'
+LOG_FORMAT = '%(name)s::%(asctime)-15s::%(levelname)s || %(message)s'
 logging.basicConfig(format=LOG_FORMAT)
-logger = logging.getLogger('bayleef-cli')
-logger.setLevel(logging.INFO)
+logger = logging.getLogger('Bayleef')
+logger.setLevel(logging.DEBUG)
 
 def get_node(dataset, node=None):
 
@@ -121,9 +133,12 @@ def bayleef():
 
 
 @click.command()
-@click.argument("username", envvar='USGS_USERNAME', help="username for an account with the USGS’s EROS service")
-@click.argument("password", envvar='USGS_PASSWORD', help="password for an account with the USGS’s EROS service")
+@click.argument("username", envvar='USGS_USERNAME')
+@click.argument("password", envvar='USGS_PASSWORD')
 def login(username, password):
+    """
+    Login to the USGS EROs service.
+    """
     api_key = api.login(username, password)
     click.echo(api_key)
 
@@ -134,7 +149,7 @@ def logout():
 
 
 @click.command()
-@click.argument("node", help="Name of the catalog to search in (e.g. cwic for CWIC/LSI Explorer, ee for Earth Explorer, ect.), see docs for a list of available nodes")
+@click.argument("node")
 @click.option("--start-date", help="Start date for when a scene has been acquired. In the format of yyyy-mm-dd")
 @click.option("--end-date", help="End date for when a scene has been acquired. In the format of yyyy-mm-dd")
 def datasets(node, start_date, end_date):
@@ -143,7 +158,7 @@ def datasets(node, start_date, end_date):
 
 
 @click.command()
-@click.argument("dataset", help="USGS dataset (e.g. EO1_HYP_PUB, LANDSAT_8)")
+@click.argument("dataset")
 @click.argument("scene-ids", nargs=-1)
 @node_opt
 @click.option("--extended", is_flag=True, help="Probe for more metadata.")
@@ -151,7 +166,7 @@ def datasets(node, start_date, end_date):
 @api_key_opt
 def metadata(dataset, scene_ids, node, extended, geojson, api_key):
     """
-    Request metadata for a given scene in a USGS dataset.
+    Request metadata.
     """
     if len(scene_ids) == 0:
         scene_ids = map(lambda s: s.strip(), click.open_file('-').readlines())
@@ -175,7 +190,7 @@ def dataset_fields(dataset, node):
 
 
 @click.command()
-@click.argument("dataset", help="USGS dataset (e.g. EO1_HYP_PUB, LANDSAT_8)")
+@click.argument("dataset")
 @node_opt
 @click.argument("aoi", default="-", required=False)
 @click.option("--start-date", help="Start date for when a scene has been acquired. In the format of yyyy-mm-dd")
@@ -191,7 +206,7 @@ def dataset_fields(dataset, node):
 @api_key_opt
 def search(dataset, node, aoi, start_date, end_date, lng, lat, dist, lower_left, upper_right, where, geojson, extended, api_key):
     """
-    Search the database for images that match parameters passed.
+    Search for images.
     """
     node = get_node(dataset, node)
 
@@ -232,7 +247,7 @@ def search(dataset, node, aoi, start_date, end_date, lng, lat, dist, lower_left,
 
 
 @click.command()
-@click.argument("dataset", help="USGS dataset (e.g. EO1_HYP_PUB, LANDSAT_8)")
+@click.argument("dataset")
 @click.argument("scene-ids", nargs=-1)
 @node_opt
 @api_key_opt
@@ -244,7 +259,7 @@ def download_options(dataset, scene_ids, node, api_key):
 
 
 @click.command()
-@click.argument("dataset", help="USGS dataset (e.g. EO1_HYP_PUB, LANDSAT_8)")
+@click.argument("dataset")
 @click.argument("scene_ids", nargs=-1)
 @click.option("--product", nargs=1, required=True)
 @node_opt
@@ -257,11 +272,11 @@ def download_url(dataset, scene_ids, product, node, api_key):
 
 
 @click.command()
-@click.argument("root", help="data directory to store downloads in")
+@click.argument("root")
 @node_opt
 def batch_download(root, node):
     """
-    Used with the search function to download the results returned from search
+    Download from search result.
     """
     def download_from_result(scene, root):
         scene_id = scene['entityId']
@@ -270,7 +285,7 @@ def batch_download(root, node):
         dataset = re.findall(r'dataset_name=[A-Z0-9_]*', scene['orderUrl'])[0]
         dataset = dataset.split('=')[1]
 
-        path = get_path(scene, root, dataset)
+        path = utils.get_path(scene, root, dataset)
         if os.path.exists(path):
             logger.warning('{} already in cache, skipping'.format(path))
             return
@@ -297,21 +312,24 @@ def batch_download(root, node):
 
     # convert string into dict
     resp = json.loads(resp)
-    logger.info("Number of files: {}".format(resp['data']['numberReturned']))
+    nfiles = resp['data']['numberReturned']
+    logger.info("Number of files: {}".format(nfiles))
     results = resp['data']['results']
 
-    for result in results:
+    for i, result in enumerate(results):
         # Run Downloads as threads so they keyboard interupts are
-        # deferred until download is complaete
+        # deferred until download is complete
+
+        logger.info('{}/{}'.format(i, nfiles))
         job = Thread(target=download_from_result, args=(result, root))
         job.start()
         job.join()
 
 
 @click.command()
-@click.argument("dataset", help="USGS dataset (e.g. EO1_HYP_PUB, LANDSAT_8)")
-@click.argument("root", help="data directory to store downloads in")
-@click.argument("db", help="name of database to upload to")
+@click.argument("dataset")
+@click.argument("root")
+@click.argument("db")
 @click.option("--host", default="localhost", help="host id")
 @click.option("--port", default="5432", help="port number")
 @click.option("--user", help="username for database")
@@ -320,90 +338,211 @@ def to_sql(db, dataset, root, host, port, user, password):
     """
     Upload the dataset to a database
     """
-    if not dataset in func_map.keys():
-        logger.error("{} is not a valid dataset".format(dataset))
-
     dataset_root = os.path.join(root, dataset)
 
     # The dirs with important files will always be in leaf nodes
-    leaf_dirs = list()
+    leef_dirs = list()
     for root, dirs, files in os.walk(dataset_root):
-        if files and [f for f in files if not f.startswith('.')]:
-            leaf_dirs.append(root)
+        if "images" in dirs and "original" in dirs and "metadata.json" in files and "index.json" in files:
+            leef_dirs.append(root)
 
-    logger.info("{} Folders found".format(len(leaf_dirs)))
+    logger.info("{} Folders found".format(len(leef_dirs)))
 
     # only suppoort postgres for now
     engine = create_engine('postgresql://{}:{}@{}:{}/{}'.format(user,password,host,port,db))
-    for dir in leaf_dirs:
-        logger.info("Uploading {}".format(dir))
-        try:
-            func_map[dataset](dir, engine)
-        except Exception as e:
-            logger.error("ERROR: {}".format(e))
-            import traceback
-            traceback.print_exc()
+    try:
+        sql.serial_upload(dataset, leef_dirs, engine)
+    except:
+        for dir in leef_dirs:
+            logger.info("Uploading {}".format(dir))
+            try:
+                sql.func_map[dataset](dir, engine)
+            except Exception as e:
+                logger.error("ERROR: {}".format(e))
+                import traceback
+                traceback.print_exc()
+
+@click.command(context_settings=dict(
+    ignore_unknown_options=True,
+    allow_extra_args=True,
+))
+@click.argument("input", required=True)
+@click.argument("bayleef_data", required=True)
+@click.option("--add-option", "-ao", default='', help="Text containing misc. sbatch parameters")
+@click.option("--log", "-l", default='.', help="Log output directory, default is redirected to /dev/null")
+@click.option("--mem", '-m', default='4', help="Memory per job in gigabytes. Default = 4")
+@click.option("--time", "-t", default='01:00:00', help="Max time per job, default = one hour.")
+@click.option("--njobs", "-n", default=-1, help="Max number of conccurent jobs, -1 for unlimited. Default = -1")
+def sbatch_master(input, bayleef_data, add_option, njobs, **options):
+    """
+    Run load-master command as sbatch jobs. Strongly reccomended that this is run directly on
+    the slurm master.
+    """
+
+    if not os.path.exists(options['log']):
+        raise Exception('Log directory {} is not a directory or does not exist'.format(options['log']))
+
+    if not os.path.exists(bayleef_data):
+        raise Exception('Bayleef data directory {} is not a directory or does not exist'.format(bayleef_data))
+
+    files = glob(input+'/**/*.hdf', recursive=True)
+
+    logger.info("sbatch options: log={log} mem={mem} time={time} njobs={njobs}".format(**options, njobs=njobs))
+    logger.info("other options: {}".format(add_option if add_option else None))
+
+    for i, file in enumerate(files):
+        command = "bayleef load-master '{}' '{}'".format(file, bayleef_data)
+        job_name = 'bayleef_{}_{}'.format(i, os.path.splitext(os.path.basename(file))[0] )
+        log_file = os.path.join(options['log'], job_name+'.log')
+
+        logger.info("{}/{}".format(i, len(files)))
+        logger.info("Dispatching {}".format(command))
+        logger.info('Jobname: {}'.format(job_name))
+        logger.info('Log File: {}'.format(log_file))
+        out = pysbatch.sbatch(wrap=command, mem=options['mem'], log=log_file, time=options['time'], job_name=job_name, add_option=add_option)
+        logger.info(out)
+
+        if njobs != -1:
+            pysbatch.limit_jobs(njobs)
+
 
 @click.command()
-@click.argument("inroot")
-@click.argument("outroot")
-def load_master(inroot, outroot):
+@click.argument("input", required=True)
+@click.argument("--bayleef_data", "-d", default=config.data)
+@click.option("-r", is_flag=True, help="Set to recursively glob .HDF files (Warning: Every .HDF file under the directory will be treated as a Master file)")
+def load_master(input, bayleef_data, r):
     """
-    only temporary
+    Load master data.
 
     parameters
     ----------
+
+    in : str
+         root directory containing master files, .HDFs are recursively globbed.
+
+    bayleef_data : str
+                   root of the bayleef data directory
     """
-    def master(root, masterhdf):
-        fd = GeoDataset(masterhdf)
-        date = datetime.strptime(fd.metadata['CompletionDate'] , "%d-%b-%Y %H:%M:%S")
-        line = fd.metadata['FlightLineNumber']
-        daytime_flag = fd.metadata['day_night_flag']
-        ID = fd.metadata['producer_granule_id'].split('.')[0]
 
-        path = os.path.join(root, 'MASTER',str(date.year), str(line), daytime_flag,ID)
-        newhdf = os.path.join(path, os.path.basename(masterhdf))
+    files = input
+    if not r: # if not recursive
+        files = [input]
+    else:
+        files = glob(input+'/**/*.hdf', recursive=True)
 
-        # Try making the directory
-        try:
-            os.makedirs(path)
-        except OSError as exc:
-            if exc.errno == errno.EEXIST and os.path.isdir(path):
-                pass
-            else:
-                raise
-
-        # copy original hdf
-        try:
-            copyfile(masterhdf, newhdf)
-        except shutil.SameFileError:
-            pass
-
-        # explicitly close file descriptor
-        del fd
-
-        fd = GeoDataset(newhdf)
-        subdatasets = fd.dataset.GetSubDatasets()
-
-        for dataset in subdatasets:
-            ofilename = '{}.vrt'.format(dataset[1].split()[1])
-            ofilename_abspath = os.path.join(path, ofilename)
-            gdal.Translate(ofilename_abspath, dataset[0], format="VRT")
-
-        # create geo corrected calibrated image
-        lats = os.path.join(path, 'PixelLatitude.vrt')
-        lons = os.path.join(path, 'PixelLongitude.vrt')
-        image = os.path.join(path, 'CalibratedData.vrt')
-        geocorrected_image = os.path.join(path, 'CalibratedData_Geo.tif')
-        geolocate(image, geocorrected_image, lats, lons)
-
-    files = glob(inroot+'/**/*.hdf', recursive=True)
     total = len(files)
-    logger.info('TOTAL: {}'.format(total))
+
+    logger.info("{} Files Found".format(total))
     for i, file in enumerate(files):
         logger.info('{}/{} ({}) - Proccessing {}'.format(i, total, round(i/total, 2), file))
-        master(outroot, file)
+        ingest.master(bayleef_data, file)
 
+
+def batch_jobs(jobs, log=".", njobs=-1,  **sbatch_kwargs):
+    logger.info("Jobs:")
+    utils.print_dict(jobs)
+
+    if isinstance(jobs, list):
+        jobs = OrderedDict({"step1" : jobs})
+
+    for step in jobs:
+        joblist = []
+        commands = jobs[step]
+
+        logger.info("Running {} jobs for {}".format(len(commands), step))
+
+        for i, command in enumerate(commands):
+            print(command)
+            # job_name = 'bayleef_{}_{}'.format("".join(step.split()), i)
+            # joblist.append(job_name)
+            # log_file = os.path.join(log, job_name+'.log')
+            #
+            # logger.info("{} {}/{}".format(step, i+1, len(commands)))
+            # logger.info("Dispatching {}".format(command))
+            # logger.info('Jobname: {}'.format(job_name))
+            # logger.info('Log File: {}'.format(log_file))
+            # out = pysbatch.sbatch(wrap=command, job_name=job_name, log=log_file, **sbatch_kwargs)
+            # logger.info(out.lstrip().rstrip())
+            # if njobs != -1:
+            #     pysbatch.limit_jobs(njobs)
+
+        logger.info("Waiting for jobs in {} to complete.".format(step))
+        pysbatch.wait_for_jobs(joblist)
+
+
+@click.command()
+@click.argument("id1", required=False)
+@click.argument("id2", required=False)
+@click.option("--file", "-f", default=None)
+@click.option("--log", "-l", default='.', help="Log output directory, default is current working directory.")
+@click.option("--mem", '-m', default='4', help="Memory per job in gigabytes. Default = 4")
+@click.option("--time", "-t", default='01:00:00', help="Max time per job, default = one hour.")
+@click.option("--njobs", "-n", default=-1, help="Max number of conccurent jobs, -1 for unlimited. Default = -1")
+@click.option("--bayleef_data", "-d", default=config.data)
+def themis_pairs(id1, id2, file, log, mem, time, njobs, bayleef_data):
+    from bayleef.ingest import themis_pairs
+
+    if file:
+        pairs = open(file).read()
+        pairs = pairs.split("\n")
+        commands = {"themis_pairs" : ["bayleef themis-pairs -d {} {}".format(bayleef_data, pair) for pair in pairs]}
+        batch_jobs(commands, log=log, mem=mem, time=time, njobs=njobs)
+
+    else:
+        if not id1 or not id2:
+            logger.error("Invalid IDs: {} {}".format(id1, id2))
+            exit(0)
+        ingest.themis_pairs(bayleef_data, id1, id2)
+
+@click.command()
+def config_call():
+    logger.info("Config file located in: {}".format(config_file))
+    utils.print_dict(config)
+
+@click.command(context_settings=dict(
+    ignore_unknown_options=True,
+    allow_extra_args=True,
+))
+@click.argument("job_file", required=False, default=None)
+@click.option("--add-option", "-ao", default='', help="Text containing misc. sbatch parameters")
+@click.option("--log", "-l", default='.', help="Log output directory, default is current working directory.")
+@click.option("--mem", '-m', default='4', help="Memory per job in gigabytes. Default = 4")
+@click.option("--time", "-t", default='01:00:00', help="Max time per job, default = one hour.")
+@click.option("--njobs", "-n", default=-1, help="Max number of conccurent jobs, -1 for unlimited. Default = -1")
+def agility(job_file, add_option, njobs, time, mem, log, **options):
+    is_pipe = not isatty(stdin.fileno())
+    if is_pipe:
+        # get pipped in response
+        pipestr = ""
+        for line in sys.stdin:
+            pipestr += line
+
+    if not is_pipe and not job_file:
+        logger.error("No Valid input. Job File: {}".format(job_file))
+        exit(1)
+
+    if not os.path.exists(log):
+        raise Exception('Log directory {} is not a directory or does not exist'.format(options['log']))
+
+    if is_pipe:
+        try:
+            jobs = yaml.load(pipestr, yaml.SafeLoader)
+        except Exception as e:
+            logger.error("Not Valid Json\n{}".format(pipestr))
+            exit(1)
+    else:
+        try:
+            jobs = yaml.load(open(job_file), yaml.SafeLoader)
+        except Exception as e:
+            logger.error("Cannot open {} for reading.".format(job_file))
+            exit(1)
+    batch_jobs(jobs, log=log, mem=mem, time=time, njobs=njobs)
+
+
+bayleef.add_command(agility, "agility")
+bayleef.add_command(agility, "sbatch")
+bayleef.add_command(config_call, "config")
+bayleef.add_command(themis_pairs, "themis-pairs")
 bayleef.add_command(to_sql, "to-sql")
 bayleef.add_command(login)
 bayleef.add_command(logout)
@@ -413,6 +552,6 @@ bayleef.add_command(metadata)
 bayleef.add_command(search)
 bayleef.add_command(download_options, "download-options")
 bayleef.add_command(download_url, "download-url")
-bayleef.add_command(batch_download, "batch-download")
 bayleef.add_command(batch_download, "download")
 bayleef.add_command(load_master, "load-master")
+bayleef.add_command(sbatch_master, "sbatch-master")

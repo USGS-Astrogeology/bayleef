@@ -1,5 +1,4 @@
-
-__version__ = "0.2.1"
+__version__ = "0.2.2"
 
 # The USGS API endpoint
 USGS_API = "https://earthexplorer.usgs.gov/inventory/json"
@@ -33,3 +32,33 @@ class USGSAmbiguousNode(Exception):
 
 class USGSDependencyRequired(ImportError):
     pass
+
+from bayleef.examples import get_path
+import os
+import yaml
+from pathlib import Path
+from shutil import copyfile
+
+class dotdict(dict):
+     """dot.notation access to dictionary attributes"""
+     def __getattr__(self, name):
+         o = dict.get(self, name)
+         if isinstance(o, dict):
+             return dotdict(o)
+         else:
+             return o
+
+     __setattr__ = dict.__setitem__
+     __delattr__ = dict.__delitem__
+
+config_file = os.path.join(get_path('config'), 'config.yaml')
+config = None
+
+os.makedirs(os.path.join(str(Path.home()), ".bayleef"), exist_ok=True)
+if not os.path.isfile(os.path.join(str(Path.home()), ".bayleef", "config.yaml")):
+    copyfile(config_file, os.path.join(str(Path.home()), ".bayleef", "config.yaml"))
+    config = dotdict(yaml.load(open(config_file)))
+else:
+    config = dotdict(yaml.load(open(os.path.join(str(Path.home()), ".bayleef", "config.yaml"))))
+
+config_file = os.path.join(str(Path.home()), ".bayleef", "config.yaml")
