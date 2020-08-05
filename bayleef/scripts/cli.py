@@ -408,7 +408,7 @@ def sbatch_master(input, bayleef_data, add_option, njobs, **options):
 
 @click.command()
 @click.argument("input", required=True)
-@click.argument("--bayleef_data", "-d", default=config.data)
+@click.option("--bayleef_data", "-d", default=config.data)
 @click.option("-r", is_flag=True, help="Set to recursively glob .HDF files (Warning: Every .HDF file under the directory will be treated as a Master file)")
 def load_master(input, bayleef_data, r):
     """

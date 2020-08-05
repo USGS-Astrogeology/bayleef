@@ -57,8 +57,8 @@ config = None
 os.makedirs(os.path.join(str(Path.home()), ".bayleef"), exist_ok=True)
 if not os.path.isfile(os.path.join(str(Path.home()), ".bayleef", "config.yaml")):
     copyfile(config_file, os.path.join(str(Path.home()), ".bayleef", "config.yaml"))
-    config = dotdict(yaml.load(open(config_file)))
+    config = dotdict(yaml.load(open(config_file), Loader=yaml.BaseLoader))
 else:
-    config = dotdict(yaml.load(open(os.path.join(str(Path.home()), ".bayleef", "config.yaml"))))
+    config = dotdict(yaml.load(open(os.path.join(str(Path.home()), ".bayleef", "config.yaml")), Loader=yaml.BaseLoader))
 
 config_file = os.path.join(str(Path.home()), ".bayleef", "config.yaml")
