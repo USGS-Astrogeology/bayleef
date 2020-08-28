@@ -5,6 +5,15 @@ Interface to REST services for planetary imagery with the goal of affording the 
 
 Documentation is available at: https://usgs-astrogeology.github.io/bayleef/
 
+## Congfiguration 
+
+After installing dependencies note their paths, then edit `bayleef/examples/config/config.yaml` and input the full paths to 
+- `data` - temporary path bayleef will use for data storage & processing.
+    - CAVEAT: The `config.yaml` file will be copied to the `data` path, and will be defaulted to instead of the one in the repository. Future changes to the config should be done to that file.
+- `davinci_bin` - path to [davinci](http://davinci.asu.edu/) installation
+- `themis: controlled_kernels` - path to themis kernels.
+- `themis: map_file` - full path to the `bayleef/examples/isis_files/equirectangular.map` file in this repository.
+
 ## CLI Overview
 
 The CLI allows for the programatic searching, downloading and uploading (to a Postgres server) of USGS data.

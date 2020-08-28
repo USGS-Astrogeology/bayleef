@@ -1,9 +1,9 @@
-data: "/scratch/krodriguez/bayleef-data/"
-davinci_bin: "/home/krodriguez/Downloads/davinci"
+data: ""
+davinci_bin: ""
 
 themis:
-  controlled_kernels: "/archive/projects/themis_control/Kernels"
-  map_file: "/home/krodriguez/repos/bayleef/bayleef/examples/isis_files/equirectangular.map"
+  controlled_kernels: ""
+  map_file: ""
   bundle_parameters:
       radius : yes
       update : yes
