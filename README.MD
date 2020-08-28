@@ -1,9 +1,36 @@
 
 ![](logo.png)
 
-Interface to REST services for planetary imagery with the goal of affording the transfer of mission data into an openly available and homogeneous data store.
+Interface to REST services for planetary imagery with the goal of affording
+the transfer of mission data into an openly available and homogeneous data
+store.
 
 Documentation is available at: https://usgs-astrogeology.github.io/bayleef/
+
+## Getting Started
+
+The easiest way to install the bayleef package is to downlaod it via
+[Anaconda](https://www.anaconda.com/) from the
+[the USGS Astrogeology channel](https://anaconda.org/usgs-astrogeology):  
+`conda install -c usgs-astrogeology bayleef`  
+
+### To install from source:  
+
+Download the repository and enter the root directory:  
+
+`git clone https://github.com/USGS-Astrogeology/bayleef.git`
+
+'cd bayleef/'
+
+Create & activate the **bayleef** conda environment with the .yml file:  
+
+`conda env create -f bayleef_env.yml`
+
+`conda activate bayleef`
+
+Finally, install the package, it is recommended to install in develop mode  
+
+`python setup.py develop`
 
 ## CLI Overview
 
@@ -31,9 +58,9 @@ Returns a JSON string with containing result metadata. The JSON blob doesn't mea
 
 Breakdown:
 
- - **[node]** : Name of the catalog to search in (e.g. cwic for CWIC/LSI Explorer, ee for Earth Explorer, ect.), [see docs](https://kelvinrr.github.io/bayleef/reference/catalog.html) for a list of available nodes
- - **[dataset]** : The specific collection to download from (e.g. LANDSAT_8_C1 for landsat 8 collection 1), [see docs](https://kelvinrr.github.io/bayleef/reference/catalog.html)  for a list of available datasets
- - **[start-data]/[end-data]** : Dates when dataset are aquired in yyyy-mm-dd format
+ - **[node]** : Name of the catalog to search in (e.g. cwic for CWIC/LSI Explorer, ee for Earth Explorer, ect.), [see docs](docs/reference/catalog/) for a list of available nodes
+ - **[dataset]** : The specific collection to download from (e.g. LANDSAT_8_C1 for landsat 8 collection 1), [see docs](docs/reference/catalog/)  for a list of available datasets
+ - **[start-date]/[end-date]** : Dates when dataset are aquired in yyyy-mm-dd format
  - **[longitude]/[latitude]** : lon/lat point the image footprint should intersect
  - **[radius]** : radius in meters from the lat lon point, if --dist is passed in, any image with a footprint overlapping the circle will be accepted.
 
@@ -51,7 +78,7 @@ Breakdown:
 
  - **[args]** : the same args you use in `search`, as the results define what is downloaded
  - **[root]** : Download location. For each dataset, bayleef has a predefined path structure. For example, Landsat 8 is `[year]/[row]/[path]/id.iff`. So you want to reuse the same root directory for every download operation.
- - **[node]** : Name of the catalog to search in (e.g. cwic for CWIC/LSI Explorer, ee for Earth Explorer, ect.), [see docs](https://kelvinrr.github.io/bayleef/reference/catalog.html)  for a list of available nodes
+ - **[node]** : Name of the catalog to search in (e.g. cwic for CWIC/LSI Explorer, ee for Earth Explorer, ect.), [see docs](docs/reference/catalog/))  for a list of available nodes
 
 > ** NOTE ** Each dataset requires a custom ingestion function for batch-downloading, so check the docs for a list of datasets available for download.
 
@@ -66,7 +93,7 @@ bayleef to-sql --host [HOST] --port [PORT] --user [USER] --password [PASS] [DATA
 Breakdown:
 
 - **[HOST]/[PORT]/[USER]/[PASSWORD]** : Conenction and login info for the PostgreSQL instance
-- **[dataset]** : The specific collection to download from (e.g. LANDSAT_8_C1 for landsat 8 collection 1), [see docs](https://kelvinrr.github.io/bayleef/reference/catalog.html)  for a list of available datasets
+- **[dataset]** : The specific collection to download from (e.g. LANDSAT_8_C1 for landsat 8 collection 1), [see docs](docs/reference/catalog/))  for a list of available datasets
 - **[ROOT]** : Should be the same as the root passed into `batch-download`, the location of the downloaded files.
 - **[DB]** Name of the database to upload to.
 
