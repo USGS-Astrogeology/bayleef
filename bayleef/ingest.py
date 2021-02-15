@@ -355,10 +355,10 @@ def themis_pairs(root, id1, id2):
 
     arr1 = img1_bt_projected.read_array()
     arr2 = img2_bt_projected.read_array()
-    arr1[arr1 == pysis.specialpixels.SPECIAL_PIXELS['Real']['Null']] = 0
-    arr2[arr2 == pysis.specialpixels.SPECIAL_PIXELS['Real']['Null']] = 0
-    arr1[arr1 == -32768.] = 0
-    arr2[arr2 == -32768.] = 0
+
+    arr1[arr1==0] = np.nan
+    arr1[arr1==pysis.specialpixels.SPECIAL_PIXELS['Real']['Null']] = np.nan
+    arr2[arr2==0] = np.nan
 
     arr1 = np.ma.MaskedArray(arr1, arr1 == 0)
     arr2 = np.ma.MaskedArray(arr2, arr2 == 0)
@@ -373,6 +373,45 @@ def themis_pairs(root, id1, id2):
     img1_b9_bt_overlap.data[img1_b9_bt_overlap.mask] = 0
     img2_b9_bt_overlap.data[img2_b9_bt_overlap.mask] = 0
     bt_diff.data[bt_diff.mask] = 0
+    
+    image1 = arr1[~np.isnan(arr1)]
+    image2 = arr2[~np.isnan(arr2)]
+
+    img1_stats = stats.describe(image1)
+    img2_stats = stats.describe(image2)
+
+    bt_diff = arr1 - arr2
+    bt_diff[bt_diff==0] = np.nan
+    bt_diff2 = bt_diff[~np.isnan(bt_diff)]
+    bt_diff_stats = stats.describe(bt_diff2)
+    
+    bt_diff2 = arr1-arr2
+    bt_diff2_avg = np.nanmean(arr1) - np.nanmean(arr2)
+
+    img1_offset =  arr1 - bt_diff2_avg;
+
+    img1_normalized = (img1_offset[~np.isnan(img1_offset)] - np.mean(img1_offset[~np.isnan(img1_offset)]))/np.std(img1_offset[~np.isnan(img1_offset)])
+    arr2_normalized = (arr2[~np.isnan(arr2)] - np.mean(arr2[~np.isnan(arr2)]))/np.std(arr2[~np.isnan(arr2)])
+
+    img1_normalized_stats = stats.describe(img1_normalized)
+    arr2_normalized_stats = stats.describe(arr2_normalized)
+    
+    img1_test2 = (img1_offset - np.mean(img1_offset[~np.isnan(img1_offset)]))/np.std(img1_offset[~np.isnan(img1_offset)])
+    arr2_test2 = (arr2 - np.mean(arr2[~np.isnan(arr2)]))/np.std(arr2[~np.isnan(arr2)])
+
+    img1_test = (img1_offset[~np.isnan(img1_offset)] - np.mean(img1_offset[~np.isnan(img1_offset)]))/np.std(img1_offset[~np.isnan(img1_offset)])
+    arr2_test = (arr2[~np.isnan(arr2)] - np.mean(arr2[~np.isnan(arr2)]))/np.std(arr2[~np.isnan(arr2)])
+
+    bins1, t_bins1 = np.histogram(img1_test, bins=300)
+    bins2, t_bins2 = np.histogram(arr2_test, bins=300)
+
+    array1 = t_bins1-t_bins2
+    array2 = bins1-bins2
+
+    RMS_array2 = array2
+    RMS_array1 = array1[:-1]
+
+    RMS_TEST = img1_test2 - arr2_test2
 
     # logger.info('Writing {}'.format(img1_b9_bt_path))
     # ds = utils.array2raster(img1_projected_bt_path, img1_b9_bt_overlap, img1_b9_bt_path)
@@ -428,6 +467,13 @@ def themis_pairs(root, id1, id2):
     metadata['plots']['rad_hist'] = os.path.join(plot_path, 'rad_hist.png')
     metadata['plots']['tb_hist'] = os.path.join(plot_path, 'tb_hist.png')
     metadata['plots']['diff_hist'] = os.path.join(plot_path, 'diff_hist.png')
+    metadata['plots']['themis_pair'] = os.path.join(plot_path, 'themis_pair.png')
+    metadata['plots']['themis_pair_difference'] = os.path.join(plot_path, 'themis_pair_difference.png')
+    metadata['plots']['difference_histogram'] = os.path.join(plot_path, 'difference_histogram.png')
+    metadata['plots']['themis_pair_histogram'] = os.path.join(plot_path, 'themis_pair_histogram.png')
+    metadata['plots']['themis_pair_normalized_histogram'] = os.path.join(plot_path, 'themis_pair_normalized_histogram.png')
+    metadata['plots']['normalized_difference_histogram'] = os.path.join(plot_path, 'normalized_difference_histogram.png')
+    metadata['plots']['normalized_difference_image'] = os.path.join(plot_path, 'normalized_difference_image.png')
     metadata['plots']['match_plot'] = autocnet_plot_path
 
     if not used_smithed:
@@ -468,6 +514,80 @@ def themis_pairs(root, id1, id2):
     plt.savefig(metadata['plots']['diff_hist'])
     plt.close()
 
+    plt.figure(figsize=(25,10))
+    plt.imshow(arr1, alpha=.75, cmap='RdBu_r')
+    plt.imshow(arr2, alpha=.75, cmap='RdBu_r')
+    plt.colorbar()
+    plt.savefig(metadata['plots']['themis_pair'])
+    plt.close()
+
+    plt.figure(figsize=(25,10))
+    plt.imshow(bt_diff, alpha=.75, cmap='RdBu_r')
+    plt.colorbar()
+    plt.savefig(metadata['plots']['themis_pair_difference'])
+    plt.close()
+    
+    plt.figure(figsize=(25,10))
+    plt.hist(bt_diff2, bins=300, alpha=.75, color='purple', label='offset')
+    plt.xlabel('Brightness Temperature Difference (K)')
+    plt.ylabel('Counts')
+    plt.legend()
+    plt.savefig(metadata['plots']['difference_histogram'])
+    plt.close()
+    
+    plt.figure(figsize=(25,10))
+    plt.hist(image1, bins=300, alpha=.75, color='blue', label='Image 1')
+    plt.hist(image2, bins=300, alpha=.75, color='green', label='Image 2')
+    plt.xlabel('Brightness Temperature (K)')
+    plt.ylabel('Counts')
+    plt.legend()
+    plt.savefig(metadata['plots']['themis_pair_histogram'])
+    plt.close()
+ 
+    plt.figure(figsize=(25,10))
+    _ = plt.hist(img1_normalized, bins=300, alpha=.75, color='purple', label='Image 1 - $\Delta$ avg. BT')
+    _ = plt.hist(arr2_normalized, bins=300, alpha=.75, color='green', label='Image 2')
+    plt.xlabel('Normalized Brightness Temperature')
+    plt.ylabel('Counts')
+    plt.legend()
+    plt.savefig(metadata['plots']['themis_pair_normalized_histogram'])
+    plt.close()
+    
+    plt.figure(figsize=(25,10))
+    width = RMS_array1[1] - RMS_array1[0]
+    plt.bar(RMS_array1, RMS_array2, width=width, color='k', align='center')
+    plt.xlim(np.amin(RMS_array1),np.amax(RMS_array1))
+    plt.xlabel('Normalized Brightness Temperature Difference ([Image 1 - $\Delta$ avg. BT] - [Image 2])')
+    plt.ylabel('Counts (Difference)')
+    plt.savefig(metadata['plots']['normalized_difference_histogram'])
+    plt.close()
+    
+    plt.figure(figsize=(25,10))
+    width = RMS_array1[1] - RMS_array1[0]
+    plt.bar(RMS_array1, RMS_array2, width=width, color='k', align='center')
+    plt.xlim(np.amin(RMS_array1),np.amax(RMS_array1))
+    plt.xlabel('Normalized Brightness Temperature Difference ([Image 1 - $\Delta$ avg. BT] - [Image 2])')
+    plt.ylabel('Counts (Difference)')
+    plt.savefig(metadata['plots']['normalized_difference_histogram'])
+    plt.close()
+    
+    if np.nanmax(bt_diff2) > np.abs(np.nanmin(bt_diff2)):
+        plt.figure(figsize=(30,15))
+        plt.imshow(arr1, alpha=.95, cmap=cm.gray)
+        plt.imshow(arr2, alpha=.95, cmap=cm.gray)
+        plt.imshow(bt_diff2, alpha=.90, cmap='RdBu_r', vmin=-np.nanmax(bt_diff2), vmax=np.nanmax(bt_diff2))
+        plt.colorbar()
+        plt.savefig(metadata['plots']['normalized_difference_image'])
+        plt.close()
+    else:
+        plt.figure(figsize=(30,15))
+        plt.imshow(arr1, alpha=.95, cmap=cm.gray)
+        plt.imshow(arr2, alpha=.95, cmap=cm.gray)
+        plt.imshow(bt_diff2, alpha=.90, cmap='RdBu_r', vmin=np.nanmin(bt_diff2), vmax=np.abs(np.nanmin(bt_diff2)))
+        plt.colorbar()
+        plt.savefig(metadata['plots']['normalized_difference_image'])
+        plt.close()
+    
     metadata_path = os.path.join(pair_dir, 'metadata.json')
     json.dump(metadata,open(metadata_path, 'w+'), default=utils.date_converter)
 
