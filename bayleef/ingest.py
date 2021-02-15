@@ -338,13 +338,13 @@ def themis_pairs(root, id1, id2):
     img2_b9_overlap.data[img2_b9_overlap.mask] = 0
     rad_diff.data[rad_diff.mask] = 0
 
-    # logger.info('Writing {}'.format(img1_b9_path))
-    # ds = utils.array2raster(img1_projected_path, img1_b9_overlap, img1_b9_path)
-    # del ds
-    #
-    # logger.info('Writing {}'.format(img2_b9_path))
-    # ds = utils.array2raster(img2_projected_path, img2_b9_overlap, img2_b9_path)
-    # del ds
+    logger.info('Writing {}'.format(img1_b9_path))
+    ds = utils.array2raster(img1_projected_path, img1_b9_overlap, img1_b9_path)
+    del ds
+    
+    logger.info('Writing {}'.format(img2_b9_path))
+    ds = utils.array2raster(img2_projected_path, img2_b9_overlap, img2_b9_path)
+    del ds
 
     logger.info('Writing {}'.format(rad_diff_image))
     ds = utils.array2raster(img1_projected_path, rad_diff, rad_diff_image)
@@ -352,6 +352,14 @@ def themis_pairs(root, id1, id2):
 
     img1_bt_projected = GeoDataset(img1_projected_bt_path)
     img2_bt_projected = GeoDataset(img2_matchmapped_bt_path)
+    
+    logger.info('Writing {}'.format(img1_projected_bt_path))
+    ds = utils.array2raster(img1_projected_bt_path, img1_bt_projected.read_array(), rad_diff_image)
+    del ds
+    
+    logger.info('Writing {}'.format(img2_matchmapped_bt_path))
+    ds = utils.array2raster(img2_matchmapped_bt_path, img2_bt_projected.read_array(), rad_diff_image)
+    del ds
 
     arr1 = img1_bt_projected.read_array()
     arr2 = img2_bt_projected.read_array()
